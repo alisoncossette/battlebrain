@@ -1,5 +1,12 @@
 __pycache__/
 *.pyc
-.env
 .DS_Store
 *.log
+
+# SECRETS — never commit
+.env
+.env.*
+*.env
+.evn.txt
+*.key
+secrets*

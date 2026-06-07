@@ -123,6 +123,24 @@ BRAINS = {
 }
 
 # ---------------------------------------------------------------------------
+# GARRISON-PROVISIONED CACHE. The comms-up build (`python ingest.py`) runs the
+# REAL Unsiloed parse + Moss index over corpus/*.pdf and writes brains_cache.json.
+# Downrange (comms-down) the server reads that cache offline. Falls back to the
+# inline BRAINS above if no cache exists, so the demo always works.
+try:
+    from config import load_env
+    load_env()
+except Exception:
+    pass
+try:
+    _cache = ROOT / "brains_cache.json"
+    if _cache.exists():
+        BRAINS = json.loads(_cache.read_text(encoding="utf-8"))
+        print(f"[brains] loaded garrison-provisioned cache: {list(BRAINS.keys())}")
+except Exception as _e:
+    print(f"[brains] using inline doctrine (no cache): {_e}")
+
+# ---------------------------------------------------------------------------
 def authorize(node_id, identity_id):
     """Return (can_pair, full_access, reason)."""
     node = BRAINS[node_id]

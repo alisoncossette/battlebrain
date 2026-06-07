@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Battle Brain — Slides</title>
+<style>
+  :root{
+    --bg:#0b0f0c; --panel:#11160f; --ink:#e8f0e6; --dim:#9bb39a;
+    --accent:#7dd36b; --warn:#ff5d5d; --line:#26331f; --gold:#d9c46a;
+  }
+  *{box-sizing:border-box; margin:0; padding:0}
+  html,body{background:var(--bg); color:var(--ink);
+    font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;}
+  .slide{
+    width:100vw; height:100vh; padding:6vh 7vw; display:flex; flex-direction:column;
+    justify-content:center; gap:2.2vh; page-break-after:always; position:relative;
+    border-bottom:1px solid var(--line);
+  }
+  .tag{position:absolute; top:4vh; right:7vw; font-size:1.1vw; letter-spacing:.25em;
+    color:var(--dim); text-transform:uppercase}
+  .kicker{font-size:1.2vw; letter-spacing:.45em; color:var(--accent); text-transform:uppercase}
+  h1{font-size:6.2vw; font-weight:800; letter-spacing:-.01em; line-height:.98}
+  .sub{font-size:2.1vw; color:var(--gold); font-style:italic}
+  .lead{font-size:2.3vw; font-weight:600; line-height:1.25; max-width:46ch}
+  ul{list-style:none; display:flex; flex-direction:column; gap:1.6vh; margin-top:1vh}
+  li{font-size:1.55vw; line-height:1.3; display:flex; gap:1.1vw; align-items:flex-start}
+  li b{color:var(--ink)} li span.t{color:var(--dim)}
+  .emoji{font-size:1.8vw; flex:0 0 auto; line-height:1}
+  .foot{position:absolute; bottom:4vh; left:7vw; font-size:1.1vw; color:var(--dim);
+    letter-spacing:.18em; text-transform:uppercase}
+  /* slide 2 */
+  .cols{display:grid; grid-template-columns:1fr 1fr; gap:2vw; margin-top:1vh}
+  .card{background:var(--panel); border:1px solid var(--line); border-radius:14px; padding:2.4vh 1.8vw}
+  .card h3{font-size:1.15vw; letter-spacing:.2em; text-transform:uppercase; color:var(--accent); margin-bottom:1.2vh}
+  .card.down h3{color:var(--gold)}
+  .card p{font-size:1.4vw; line-height:1.35; color:var(--ink)}
+  .diff{margin-top:1.2vh}
+  .diff .row{font-size:1.55vw; line-height:1.4; margin-top:.8vh}
+  .green{color:var(--accent)} .red{color:var(--warn)}
+  .next{font-size:1.4vw; color:var(--dim); margin-top:1.4vh; line-height:1.4}
+  .next b{color:var(--ink)}
+  h2{font-size:3.4vw; font-weight:800; line-height:1.05; max-width:34ch}
+  @media print{ .slide{height:100vh} }
+</style>
+</head>
+<body>
+
+<!-- SLIDE 1 — OVERVIEW -->
+<section class="slide">
+  <div class="tag">Track · Support</div>
+  <div class="kicker">Conversational AI Hackathon · Moss × YC</div>
+  <h1>BATTLE BRAIN</h1>
+  <div class="sub">Comms denied. Knowledge isn't.</div>
+  <div class="lead">A voice support agent that pulls the right doc — and respects who's asking — fully offline.</div>
+  <ul>
+    <li><span class="emoji">🔌</span><div><b>The problem.</b> <span class="t">Cloud support bots die the moment the network drops. The people who need answers most — in the field, in a dead zone — have no signal.</span></div></li>
+    <li><span class="emoji">🧠</span><div><b>The insight.</b> <span class="t">You don't need the cloud <i>in</i> the field. You need it <i>before</i>. Provision knowledge in garrison; operate fully local.</span></div></li>
+    <li><span class="emoji">🎯</span><div><b>What it does.</b> <span class="t">Ask by voice → get the right doctrine passage, cited — tailored to the user's role and clearance. Zero connectivity, zero API keys.</span></div></li>
+  </ul>
+  <div class="foot">Voice is solved · Retrieval is the bottleneck</div>
+</section>
+
+<!-- SLIDE 2 — HOW IT WORKS -->
+<section class="slide">
+  <div class="tag">How it works · Why it wins</div>
+  <div class="kicker">Provision with the cloud · Operate without it</div>
+  <h2>Two phases. One thesis.</h2>
+  <div class="cols">
+    <div class="card up">
+      <h3>Garrison — comms UP</h3>
+      <p>Unsiloed parses manuals → <b>Moss builds the semantic index</b> → TrueFoundry encodes clearance → signed brains pushed to each node.</p>
+    </div>
+    <div class="card down">
+      <h3>Field — comms DOWN</h3>
+      <p>Runs <b>100% local.</b> On-device Qwen phrases cited answers. No internet, no keys.</p>
+    </div>
+  </div>
+  <div class="diff">
+    <div class="row"><span class="green">🟢 Rifleman → buddy-aid &nbsp;·&nbsp; Medic → full TCCC depth</span> — same node, different user.</div>
+    <div class="row"><span class="red">🔒 Not cleared → ACCESS DENIED, and it's logged</span> — force protection, enforced offline.</div>
+  </div>
+  <div class="next"><b>Where it goes:</b> field-service &amp; first-responder support (offline, permission-tiered) → defense (SBIR) → on-orbit / DDIL. Same engine, anywhere the link can die.</div>
+  <div class="foot">The answer depends on who you are — and it survives a dead link</div>
+</section>
+
+</body>
+</html>
