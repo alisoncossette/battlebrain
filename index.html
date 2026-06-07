@@ -830,12 +830,29 @@
   // SPEECH  (TTS + STT) — both optional / guarded
   // ============================================================
   var TTS = ("speechSynthesis" in window) ? window.speechSynthesis : null;
+  var _voice = null;
+  function pickVoice(){
+    if(!TTS) return null;
+    var vs = TTS.getVoices() || [];
+    if(!vs.length) return null;
+    // Prefer natural / neural English voices for a less-robotic read.
+    var prefs = [/natural/i,/neural/i,/aria/i,/jenny/i,/guy/i,/google.*(us|uk|english)/i,/online/i,/zira/i,/david/i];
+    for(var p=0;p<prefs.length;p++){
+      for(var i=0;i<vs.length;i++){ if(prefs[p].test(vs[i].name) && /en/i.test(vs[i].lang)) return vs[i]; }
+    }
+    for(var j=0;j<vs.length;j++){ if(/^en/i.test(vs[j].lang)) return vs[j]; }
+    return vs[0];
+  }
+  if(TTS){ TTS.onvoiceschanged = function(){ _voice = pickVoice(); }; _voice = pickVoice(); }
   function speak(text){
     if(!TTS || !text) return;
     try{
       TTS.cancel();
       var u = new SpeechSynthesisUtterance(text);
-      u.rate = 1.0; u.pitch = 0.95; u.volume = 1.0;
+      if(!_voice) _voice = pickVoice();
+      if(_voice) u.voice = _voice;
+      // Slightly slower + natural pitch reads calmer and more human.
+      u.rate = 0.96; u.pitch = 1.0; u.volume = 1.0;
       var ind = $("speakingInd");
       u.onstart = function(){ if(ind) ind.classList.add("on"); };
       u.onend = function(){ if(ind) ind.classList.remove("on"); };
