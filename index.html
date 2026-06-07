@@ -1,0 +1,949 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>EDGE BRAIN MESH</title>
+<style>
+  :root{
+    --bg:#0a0e0a; --bg2:#0d130d; --panel:#0f1710; --panel2:#101a11;
+    --line:#1c2c1d; --line2:#244026;
+    --green:#22c55e; --green-l:#4ade80; --green-d:#15803d;
+    --amber:#f59e0b; --amber-l:#fbbf24;
+    --red:#ef4444; --red-d:#7f1d1d;
+    --txt:#cfe9d2; --txt-dim:#7fae84; --txt-faint:#4d6b50;
+    --mono: ui-monospace, 'Cascadia Code', 'Cascadia Mono', Consolas, 'Courier New', monospace;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;height:100%;}
+  body{
+    background:var(--bg);
+    color:var(--txt);
+    font-family:var(--mono);
+    font-size:15px;
+    line-height:1.45;
+    -webkit-font-smoothing:antialiased;
+    overflow-x:hidden;
+    position:relative;
+  }
+  /* background grid + scanlines */
+  body::before{
+    content:"";position:fixed;inset:0;z-index:0;pointer-events:none;
+    background-image:
+      linear-gradient(rgba(34,197,94,.035) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(34,197,94,.035) 1px, transparent 1px);
+    background-size:34px 34px;
+  }
+  body::after{
+    content:"";position:fixed;inset:0;z-index:1;pointer-events:none;
+    background:repeating-linear-gradient(to bottom,
+      rgba(0,0,0,0) 0px, rgba(0,0,0,0) 2px,
+      rgba(0,0,0,.18) 3px, rgba(0,0,0,0) 4px);
+    mix-blend-mode:multiply;opacity:.5;
+  }
+  #app{position:relative;z-index:2;max-width:1280px;margin:0 auto;padding:22px 26px 60px;}
+
+  /* ---------- shared bits ---------- */
+  .mono-head{
+    text-transform:uppercase;letter-spacing:.22em;font-weight:700;
+  }
+  .glow{ text-shadow:0 0 8px rgba(34,197,94,.55); }
+  .badge{
+    display:inline-block;padding:2px 8px;border-radius:3px;font-size:11px;
+    letter-spacing:.12em;text-transform:uppercase;font-weight:700;
+    border:1px solid currentColor;white-space:nowrap;
+  }
+  .b-unclas{color:var(--txt-dim);}
+  .b-cui{color:var(--amber);}
+  .b-secret{color:var(--red);}
+  .b-green{color:var(--green-l);}
+  .hr{height:1px;background:linear-gradient(90deg,transparent,var(--line2),transparent);margin:18px 0;}
+
+  /* ---------- top bar ---------- */
+  .topbar{
+    display:flex;align-items:center;justify-content:space-between;
+    border:1px solid var(--line2);background:linear-gradient(180deg,var(--panel),var(--bg2));
+    padding:10px 16px;border-radius:5px;margin-bottom:20px;
+    box-shadow:0 0 22px rgba(0,0,0,.6) inset;
+  }
+  .brand{display:flex;align-items:center;gap:12px;}
+  .brand .dot{
+    width:11px;height:11px;border-radius:50%;background:var(--green);
+    box-shadow:0 0 10px var(--green),0 0 18px var(--green);
+    animation:pulse 1.6s ease-in-out infinite;
+  }
+  .brand h1{font-size:18px;margin:0;}
+  .brand small{color:var(--txt-faint);letter-spacing:.18em;font-size:11px;display:block;}
+  .status-pill{
+    font-size:12px;letter-spacing:.16em;text-transform:uppercase;
+    padding:5px 12px;border-radius:3px;border:1px solid;
+  }
+  .status-up{color:var(--green-l);border-color:var(--green-d);background:rgba(34,197,94,.08);}
+  .status-down{color:var(--red);border-color:var(--red-d);background:rgba(239,68,68,.1);
+    animation:redblink 1.2s steps(2,start) infinite;}
+
+  @keyframes pulse{0%,100%{opacity:1;}50%{opacity:.35;}}
+  @keyframes redblink{0%,100%{opacity:1;}50%{opacity:.55;}}
+
+  .screen-title{
+    font-size:13px;color:var(--txt-faint);letter-spacing:.3em;margin:0 0 16px;
+  }
+
+  /* ============ PROVISIONING ============ */
+  #provision .phase-banner{
+    border:1px solid var(--line2);border-left:4px solid var(--green);
+    background:linear-gradient(90deg,rgba(34,197,94,.08),transparent);
+    padding:12px 16px;border-radius:4px;margin-bottom:22px;
+  }
+  #provision .phase-banner h2{margin:0;font-size:16px;color:var(--green-l);}
+  #provision .phase-banner p{margin:4px 0 0;color:var(--txt-dim);font-size:13px;}
+
+  .pipeline{display:flex;flex-direction:column;gap:9px;margin-bottom:26px;}
+  .stage{
+    display:grid;grid-template-columns:118px 1fr 30px;align-items:center;gap:14px;
+    border:1px solid var(--line);background:var(--panel);
+    padding:11px 14px;border-radius:4px;
+    opacity:.4;transform:translateX(-6px);
+    transition:opacity .35s ease, transform .35s ease, border-color .35s ease, box-shadow .35s ease;
+  }
+  .stage.running{opacity:1;transform:none;border-color:var(--amber);
+    box-shadow:0 0 16px rgba(245,158,11,.18);}
+  .stage.done{opacity:1;transform:none;border-color:var(--green-d);
+    box-shadow:0 0 14px rgba(34,197,94,.14);}
+  .stage .sp-badge{
+    font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;
+    text-align:center;padding:5px 4px;border-radius:3px;
+    border:1px solid var(--line2);color:var(--txt-dim);background:rgba(255,255,255,.02);
+  }
+  .stage.running .sp-badge{color:var(--amber-l);border-color:var(--amber);}
+  .stage.done .sp-badge{color:var(--green-l);border-color:var(--green-d);}
+  .stage .body .t{font-weight:700;letter-spacing:.06em;text-transform:uppercase;font-size:13px;}
+  .stage .body .d{color:var(--txt-faint);font-size:12px;}
+  .stage.running .body .d, .stage.done .body .d{color:var(--txt-dim);}
+  .stage .ind{justify-self:center;width:22px;height:22px;}
+  .spinner{
+    width:18px;height:18px;border:2px solid rgba(245,158,11,.25);
+    border-top-color:var(--amber);border-radius:50%;animation:spin .7s linear infinite;
+  }
+  @keyframes spin{to{transform:rotate(360deg);}}
+  .check{color:var(--green-l);font-size:18px;line-height:22px;text-align:center;
+    text-shadow:0 0 8px rgba(34,197,94,.7);animation:pop .35s ease;}
+  @keyframes pop{0%{transform:scale(.3);opacity:0;}100%{transform:scale(1);opacity:1;}}
+
+  .nodes-deploy{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:24px;}
+  .ncard{
+    border:1px solid var(--line);background:var(--panel);border-radius:5px;
+    padding:14px;text-align:center;transition:.4s;position:relative;overflow:hidden;
+  }
+  .ncard .icon{font-size:30px;filter:grayscale(1) opacity(.4);transition:.4s;}
+  .ncard.loaded .icon{filter:none;}
+  .ncard .nm{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--txt-dim);
+    margin-top:6px;min-height:30px;}
+  .ncard .loadbar{height:5px;background:#08120a;border-radius:3px;margin-top:10px;overflow:hidden;
+    border:1px solid var(--line);}
+  .ncard .loadbar i{display:block;height:100%;width:0;background:linear-gradient(90deg,var(--green-d),var(--green-l));
+    transition:width 1.4s ease;box-shadow:0 0 8px var(--green);}
+  .ncard.loaded .loadbar i{width:100%;}
+  .ncard .brain-tag{
+    margin-top:9px;font-size:10px;letter-spacing:.14em;text-transform:uppercase;
+    color:var(--txt-faint);opacity:0;transition:.4s;
+  }
+  .ncard.loaded .brain-tag{opacity:1;color:var(--green-l);text-shadow:0 0 8px rgba(34,197,94,.5);}
+
+  .enter-wrap{text-align:center;min-height:90px;display:flex;flex-direction:column;
+    align-items:center;justify-content:center;}
+  #enterBtn{
+    display:none;cursor:pointer;font-family:var(--mono);
+    font-size:19px;font-weight:700;letter-spacing:.18em;text-transform:uppercase;
+    color:#04140a;background:linear-gradient(180deg,var(--green-l),var(--green));
+    border:none;border-radius:6px;padding:18px 38px;
+    box-shadow:0 0 26px rgba(34,197,94,.55),0 0 60px rgba(34,197,94,.25);
+    animation:bigpulse 1.5s ease-in-out infinite;transition:transform .12s;
+  }
+  #enterBtn.show{display:inline-block;}
+  #enterBtn:hover{transform:scale(1.03);}
+  #enterBtn:active{transform:scale(.98);}
+  @keyframes bigpulse{
+    0%,100%{box-shadow:0 0 26px rgba(34,197,94,.5),0 0 60px rgba(34,197,94,.2);}
+    50%{box-shadow:0 0 40px rgba(74,222,128,.85),0 0 90px rgba(34,197,94,.45);}
+  }
+  .deploy-progress{color:var(--txt-faint);font-size:12px;letter-spacing:.18em;text-transform:uppercase;}
+
+  /* ============ FIELD ============ */
+  #field{display:none;}
+  .offline-banner{
+    border:1px solid var(--red-d);border-left:5px solid var(--red);
+    background:linear-gradient(90deg,rgba(239,68,68,.16),rgba(239,68,68,.03));
+    padding:13px 18px;border-radius:5px;margin-bottom:22px;
+    font-size:17px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;
+    color:#ffd7d7;display:flex;align-items:center;gap:10px;
+    box-shadow:0 0 22px rgba(239,68,68,.16) inset;
+  }
+  .offline-banner .rd{width:13px;height:13px;border-radius:50%;background:var(--red);
+    box-shadow:0 0 12px var(--red);animation:redblink 1.1s steps(2,start) infinite;}
+
+  .field-grid{display:grid;grid-template-columns:1fr 360px;gap:20px;align-items:start;}
+  .col-main{display:flex;flex-direction:column;gap:20px;}
+
+  .section h3{font-size:12px;color:var(--txt-faint);letter-spacing:.26em;text-transform:uppercase;
+    margin:0 0 11px;border-bottom:1px solid var(--line);padding-bottom:7px;}
+
+  .id-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:11px;}
+  .id-card{
+    border:1px solid var(--line);background:var(--panel);border-radius:5px;
+    padding:12px 14px;cursor:pointer;transition:.2s;display:flex;flex-direction:column;gap:7px;
+  }
+  .id-card:hover{border-color:var(--line2);background:var(--panel2);}
+  .id-card.sel{border-color:var(--green);background:rgba(34,197,94,.08);
+    box-shadow:0 0 16px rgba(34,197,94,.2);}
+  .id-card .label{font-size:13px;font-weight:700;letter-spacing:.04em;}
+  .id-card.sel .label{color:var(--green-l);}
+  .id-card .row{display:flex;align-items:center;justify-content:space-between;}
+  .id-card .who{font-size:10px;color:var(--txt-faint);letter-spacing:.12em;text-transform:uppercase;}
+
+  .node-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:13px;}
+  .node-card{
+    border:1px solid var(--line);background:var(--panel);border-radius:5px;
+    padding:14px;cursor:pointer;transition:.2s;position:relative;
+  }
+  .node-card:hover{border-color:var(--line2);background:var(--panel2);}
+  .node-card.paired{border-color:var(--green);background:rgba(34,197,94,.07);
+    box-shadow:0 0 18px rgba(34,197,94,.22);}
+  .node-card.locked{border-color:var(--red-d);background:rgba(239,68,68,.06);cursor:not-allowed;}
+  .node-card.locked:hover{border-color:var(--red);}
+  .node-card .top{display:flex;align-items:flex-start;gap:11px;}
+  .node-card .ic{font-size:26px;line-height:1;}
+  .node-card.locked .ic{filter:grayscale(.7) opacity(.7);}
+  .node-card .nname{font-size:13px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;}
+  .node-card.paired .nm-line .nname{color:var(--green-l);}
+  .node-card .dev{font-size:11px;color:var(--txt-faint);margin-top:3px;}
+  .node-card .foot{display:flex;align-items:center;justify-content:space-between;margin-top:11px;}
+  .node-card .lock-ico{position:absolute;top:11px;right:12px;font-size:18px;color:var(--red);
+    text-shadow:0 0 8px rgba(239,68,68,.6);}
+  .node-card .pair-tag{font-size:10px;letter-spacing:.16em;text-transform:uppercase;color:var(--txt-faint);}
+  .node-card.paired .pair-tag{color:var(--green-l);}
+
+  /* console */
+  .console{border:1px solid var(--line2);background:linear-gradient(180deg,var(--panel),var(--bg2));
+    border-radius:6px;padding:18px;}
+  .console .pair-status{font-size:12px;letter-spacing:.16em;text-transform:uppercase;
+    color:var(--txt-dim);margin-bottom:14px;}
+  .console .pair-status b{color:var(--green-l);}
+  .ptt-row{display:flex;gap:14px;align-items:center;}
+  .mic-btn{
+    flex:none;width:78px;height:78px;border-radius:50%;cursor:pointer;
+    border:2px solid var(--green-d);background:radial-gradient(circle at 50% 35%,#13301b,#0a160d);
+    color:var(--green-l);font-size:30px;display:flex;align-items:center;justify-content:center;
+    transition:.18s;box-shadow:0 0 18px rgba(34,197,94,.18);
+  }
+  .mic-btn:hover{border-color:var(--green);box-shadow:0 0 24px rgba(34,197,94,.35);}
+  .mic-btn:disabled{opacity:.35;cursor:not-allowed;}
+  .mic-btn.listening{border-color:var(--red);color:#ffb4b4;
+    background:radial-gradient(circle at 50% 35%,#3a1414,#160a0a);
+    box-shadow:0 0 0 0 rgba(239,68,68,.6);animation:miclive 1.1s ease-out infinite;}
+  @keyframes miclive{0%{box-shadow:0 0 0 0 rgba(239,68,68,.55);}
+    100%{box-shadow:0 0 0 22px rgba(239,68,68,0);}}
+  .ptt-input{flex:1;display:flex;flex-direction:column;gap:8px;}
+  .ptt-input textarea{
+    width:100%;resize:none;height:54px;font-family:var(--mono);font-size:14px;
+    background:#08120a;border:1px solid var(--line2);color:var(--txt);border-radius:4px;
+    padding:9px 11px;outline:none;
+  }
+  .ptt-input textarea:focus{border-color:var(--green-d);box-shadow:0 0 10px rgba(34,197,94,.15);}
+  .ptt-actions{display:flex;gap:9px;align-items:center;}
+  .send-btn{font-family:var(--mono);cursor:pointer;font-weight:700;letter-spacing:.12em;
+    text-transform:uppercase;font-size:12px;color:#04140a;
+    background:linear-gradient(180deg,var(--green-l),var(--green));border:none;border-radius:4px;
+    padding:9px 18px;transition:.12s;}
+  .send-btn:hover{filter:brightness(1.1);}
+  .send-btn:disabled{opacity:.4;cursor:not-allowed;filter:none;}
+  .mic-hint{font-size:11px;color:var(--txt-faint);letter-spacing:.08em;}
+  .mic-hint.err{color:var(--amber);}
+
+  .answer-wrap{margin-top:18px;}
+  .query-echo{font-size:12px;color:var(--txt-faint);letter-spacing:.06em;margin-bottom:10px;}
+  .query-echo b{color:var(--amber-l);}
+  .answer-card{
+    border:1px solid var(--green-d);border-left:4px solid var(--green);
+    background:rgba(34,197,94,.05);border-radius:5px;padding:16px 18px;
+    box-shadow:0 0 18px rgba(34,197,94,.1);
+  }
+  .answer-card .ans-text{font-size:15.5px;line-height:1.6;color:#e3f7e6;}
+  .answer-meta{display:flex;flex-wrap:wrap;gap:9px;align-items:center;margin-top:14px;}
+  .chip{font-size:11px;letter-spacing:.1em;text-transform:uppercase;padding:4px 10px;border-radius:3px;
+    border:1px solid;font-weight:700;}
+  .chip-cite{color:var(--amber-l);border-color:var(--amber);background:rgba(245,158,11,.08);
+    text-transform:none;letter-spacing:.02em;font-weight:600;}
+  .chip-depth-full{color:var(--green-l);border-color:var(--green-d);background:rgba(34,197,94,.08);}
+  .chip-depth-basic{color:var(--amber-l);border-color:var(--amber);background:rgba(245,158,11,.08);}
+  .chip-engine{color:var(--txt-dim);border-color:var(--line2);}
+  .chip-engine.qwen{color:var(--green-l);border-color:var(--green-d);}
+  .speaking{font-size:11px;color:var(--green-l);letter-spacing:.12em;text-transform:uppercase;
+    display:none;align-items:center;gap:6px;}
+  .speaking.on{display:inline-flex;}
+  .speaking .wv{width:3px;height:12px;background:var(--green-l);border-radius:2px;
+    animation:wave .6s ease-in-out infinite;}
+  .speaking .wv:nth-child(2){animation-delay:.15s;}
+  .speaking .wv:nth-child(3){animation-delay:.3s;}
+  @keyframes wave{0%,100%{transform:scaleY(.4);}50%{transform:scaleY(1);}}
+
+  .denied-card{
+    border:1px solid var(--red);border-left:4px solid var(--red);
+    background:rgba(239,68,68,.1);border-radius:5px;padding:16px 18px;
+    box-shadow:0 0 20px rgba(239,68,68,.18);animation:shake .4s ease;
+  }
+  .denied-card .dh{font-size:15px;font-weight:700;letter-spacing:.18em;text-transform:uppercase;
+    color:#ffb4b4;display:flex;align-items:center;gap:9px;margin-bottom:8px;}
+  .denied-card .dr{color:#ffd7d7;font-size:13.5px;line-height:1.55;}
+  @keyframes shake{0%,100%{transform:translateX(0);}25%{transform:translateX(-5px);}
+    75%{transform:translateX(5px);}}
+
+  .empty-console{color:var(--txt-faint);font-size:13px;text-align:center;padding:26px 10px;
+    border:1px dashed var(--line);border-radius:5px;letter-spacing:.06em;}
+
+  /* audit */
+  .audit{border:1px solid var(--line2);background:var(--bg2);border-radius:6px;padding:0;
+    position:sticky;top:14px;display:flex;flex-direction:column;max-height:calc(100vh - 40px);}
+  .audit .ah{padding:13px 15px;border-bottom:1px solid var(--line2);
+    display:flex;align-items:center;justify-content:space-between;}
+  .audit .ah .t{font-size:12px;letter-spacing:.24em;text-transform:uppercase;color:var(--green-l);}
+  .audit .ah .ct{font-size:11px;color:var(--txt-faint);}
+  .audit .log{padding:10px;overflow-y:auto;flex:1;font-size:12px;display:flex;flex-direction:column;gap:7px;}
+  .audit .log::-webkit-scrollbar{width:7px;}
+  .audit .log::-webkit-scrollbar-thumb{background:var(--line2);border-radius:4px;}
+  .log-entry{border-left:3px solid;padding:6px 9px;background:rgba(255,255,255,.02);border-radius:0 3px 3px 0;
+    animation:slidein .3s ease;}
+  @keyframes slidein{from{opacity:0;transform:translateX(8px);}to{opacity:1;transform:none;}}
+  .log-entry .ts{font-size:10px;color:var(--txt-faint);letter-spacing:.08em;}
+  .log-entry .msg{font-size:12px;word-break:break-word;margin-top:2px;}
+  .log-entry.served{border-color:var(--green);}
+  .log-entry.served .msg{color:var(--green-l);}
+  .log-entry.denied{border-color:var(--red);}
+  .log-entry.denied .msg{color:#ff9b9b;}
+  .audit .empty{color:var(--txt-faint);font-size:12px;text-align:center;padding:18px;letter-spacing:.06em;}
+
+  @media (max-width:980px){
+    .field-grid{grid-template-columns:1fr;}
+    .nodes-deploy{grid-template-columns:repeat(2,1fr);}
+    .audit{position:static;max-height:340px;}
+  }
+</style>
+</head>
+<body>
+<div id="app">
+
+  <div class="topbar">
+    <div class="brand">
+      <div class="dot"></div>
+      <div>
+        <h1 class="mono-head glow">EDGE BRAIN MESH</h1>
+        <small>DISTRIBUTED FIELD-KNOWLEDGE // NEED-TO-KNOW GATED</small>
+      </div>
+    </div>
+    <div id="statusPill" class="status-pill status-up">COMMS: UP</div>
+  </div>
+
+  <!-- ============ PROVISIONING SCREEN ============ -->
+  <section id="provision">
+    <p class="screen-title">// SCREEN 01 — PROVISIONING</p>
+    <div class="phase-banner">
+      <h2 class="mono-head">DEPLOYMENT // GARRISON — COMMS UP</h2>
+      <p>Full cloud stack runs once, in garrison. Signed brain bundles are pushed onto every forward compute node so loss of comms is survivable.</p>
+    </div>
+
+    <div id="pipeline" class="pipeline"></div>
+
+    <p class="screen-title" style="margin-top:6px;">// EDGE NODE LOAD-OUT</p>
+    <div id="nodesDeploy" class="nodes-deploy"></div>
+
+    <div class="enter-wrap">
+      <div id="deployProg" class="deploy-progress">INITIALIZING CONTROL PLANE…</div>
+      <button id="enterBtn" class="mono-head">COMMS &rarr; OFFLINE&nbsp;&nbsp;//&nbsp;&nbsp;ENTER FIELD</button>
+    </div>
+  </section>
+
+  <!-- ============ FIELD SCREEN ============ -->
+  <section id="field">
+    <p class="screen-title">// SCREEN 02 — FIELD / MISSION</p>
+    <div class="offline-banner">
+      <span class="rd"></span>
+      COMMS: OFFLINE — OPERATING AT THE EDGE
+    </div>
+
+    <div class="field-grid">
+      <div class="col-main">
+
+        <div class="section">
+          <h3>Identity // Who is in the field</h3>
+          <div id="idGrid" class="id-grid"></div>
+        </div>
+
+        <div class="section">
+          <h3>Mesh Nodes // Pair with nearest brain</h3>
+          <div id="nodeGrid" class="node-grid"></div>
+        </div>
+
+        <div class="section">
+          <h3>Paired Console // Push-to-talk</h3>
+          <div class="console">
+            <div id="pairStatus" class="pair-status">NO NODE PAIRED — select a node above to begin.</div>
+            <div class="ptt-row">
+              <button id="micBtn" class="mic-btn" disabled title="Push to talk">&#127908;</button>
+              <div class="ptt-input">
+                <textarea id="queryBox" placeholder="Pair a node, then hold the mic OR type your query and SEND…" disabled></textarea>
+                <div class="ptt-actions">
+                  <button id="sendBtn" class="send-btn" disabled>SEND QUERY</button>
+                  <span id="micHint" class="mic-hint">Hold MIC to speak. Text input is the air-gap fallback.</span>
+                </div>
+              </div>
+            </div>
+            <div id="answerArea" class="answer-wrap"></div>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- AUDIT -->
+      <aside class="audit">
+        <div class="ah">
+          <span class="t">// AUDIT LOG</span>
+          <span id="auditCount" class="ct">0 EVENTS</span>
+        </div>
+        <div id="auditLog" class="log">
+          <div class="empty">Awaiting field activity…</div>
+        </div>
+      </aside>
+    </div>
+  </section>
+
+</div>
+
+<script>
+"use strict";
+(function(){
+  // ---------- tiny helpers ----------
+  var $ = function(id){ return document.getElementById(id); };
+  function el(tag, cls, html){
+    var e = document.createElement(tag);
+    if(cls) e.className = cls;
+    if(html != null) e.innerHTML = html;
+    return e;
+  }
+  function clearanceClass(c){
+    return c==="SECRET" ? "b-secret" : c==="CUI" ? "b-cui" : "b-unclas";
+  }
+  var CLEAR = { UNCLAS:0, CUI:1, SECRET:2 };
+  function nowTs(){
+    var d = new Date();
+    function p(n){ return (n<10?"0":"")+n; }
+    return p(d.getHours())+":"+p(d.getMinutes())+":"+p(d.getSeconds());
+  }
+
+  // Built-in fallback deploy pipeline (mirrors PRD) if /api/deploy is unavailable.
+  var FALLBACK_DEPLOY = {
+    stages:[
+      {key:"ingest",   sponsor:"Unsiloed",    title:"INGEST",     detail:"Parse FMs / TMs / SOPs (PDF, tables, torque specs) into clean chunks", status:"pending", ms:700},
+      {key:"index",    sponsor:"Moss",        title:"INDEX",      detail:"Build a real-time semantic index per brain", status:"pending", ms:600},
+      {key:"govern",   sponsor:"TrueFoundry", title:"GOVERN",     detail:"Bind brain→node + per-identity need-to-know policy & audit", status:"pending", ms:650},
+      {key:"voice",    sponsor:"Qwen",        title:"VOICE",      detail:"Generate per-node voice packs + on-device reasoning model", status:"pending", ms:700},
+      {key:"reason",   sponsor:"Minimax",     title:"REASON",     detail:"Heavy synthesis / validation at provisioning time", status:"pending", ms:650},
+      {key:"transport",sponsor:"LiveKit",     title:"TRANSPORT",  detail:"Live update channel established to each node", status:"pending", ms:600},
+      {key:"orchestrate",sponsor:"AWS",       title:"ORCHESTRATE",detail:"Cloud control plane pushes signed brain bundles to every node", status:"pending", ms:750}
+    ],
+    nodes:["medic","tank","command","restricted"]
+  };
+
+  // ---------- STATE ----------
+  var CONFIG = null;        // {identities, nodes}
+  var selectedIdentity = null;
+  var pairedNode = null;
+  var nodeMeta = {};        // id -> node config (for deploy cards before config arrives)
+  var auditEvents = 0;
+
+  // ============================================================
+  // PROVISIONING
+  // ============================================================
+  function fetchJSON(url, opts){
+    return fetch(url, opts).then(function(r){
+      if(!r.ok) throw new Error("HTTP "+r.status);
+      return r.json();
+    });
+  }
+
+  function startProvisioning(){
+    // we need config too (for node icons/names) — fetch in parallel, tolerate failure
+    var deployP = fetchJSON("/api/deploy").catch(function(){ return FALLBACK_DEPLOY; });
+    var cfgP = fetchJSON("/api/config").catch(function(){ return null; });
+
+    Promise.all([deployP, cfgP]).then(function(res){
+      var deploy = res[0] || FALLBACK_DEPLOY;
+      CONFIG = res[1];
+      if(!deploy.stages || !deploy.stages.length) deploy = FALLBACK_DEPLOY;
+      renderPipeline(deploy);
+      renderDeployNodes(deploy);
+      runPipeline(deploy);
+    });
+  }
+
+  function renderPipeline(deploy){
+    var wrap = $("pipeline");
+    wrap.innerHTML = "";
+    deploy.stages.forEach(function(s, i){
+      var row = el("div", "stage");
+      row.dataset.i = i;
+      var badge = el("div", "sp-badge", s.sponsor || "—");
+      var body = el("div", "body");
+      body.appendChild(el("div", "t", s.title || s.key || "STAGE"));
+      body.appendChild(el("div", "d", s.detail || ""));
+      var ind = el("div", "ind");
+      row.appendChild(badge);
+      row.appendChild(body);
+      row.appendChild(ind);
+      wrap.appendChild(row);
+    });
+  }
+
+  function deployNodeList(deploy){
+    // prefer config node ids/icons; else use deploy.nodes
+    var ids = (deploy.nodes && deploy.nodes.length) ? deploy.nodes
+            : (CONFIG ? Object.keys(CONFIG.nodes) : FALLBACK_DEPLOY.nodes);
+    return ids;
+  }
+
+  function renderDeployNodes(deploy){
+    var wrap = $("nodesDeploy");
+    wrap.innerHTML = "";
+    var ids = deployNodeList(deploy);
+    ids.forEach(function(id){
+      var meta = CONFIG && CONFIG.nodes && CONFIG.nodes[id];
+      var icon = meta ? meta.icon : "▣";
+      var name = meta ? meta.name : id.toUpperCase()+" NODE";
+      var card = el("div", "ncard");
+      card.id = "deploynode-"+id;
+      card.appendChild(el("div", "icon", icon));
+      card.appendChild(el("div", "nm", name));
+      var lb = el("div", "loadbar"); lb.appendChild(el("i")); card.appendChild(lb);
+      card.appendChild(el("div", "brain-tag", "● BRAIN LOADED"));
+      wrap.appendChild(card);
+    });
+  }
+
+  function runPipeline(deploy){
+    var stages = deploy.stages;
+    var rows = $("pipeline").children;
+    var nodeIds = deployNodeList(deploy);
+    var prog = $("deployProg");
+
+    var i = 0;
+    function step(){
+      if(i >= stages.length){ finishDeploy(nodeIds); return; }
+      var row = rows[i];
+      var ind = row.querySelector(".ind");
+      row.classList.add("running");
+      ind.innerHTML = "";
+      ind.appendChild(el("div","spinner"));
+      prog.textContent = "PROVISIONING — " + (stages[i].sponsor||"") + " // " + (stages[i].title||stages[i].key||"");
+
+      var dur = Math.min(Math.max(stages[i].ms || 600, 250), 600);
+      setTimeout(function(){
+        row.classList.remove("running");
+        row.classList.add("done");
+        ind.innerHTML = "";
+        ind.appendChild(el("div","check","&#10003;"));
+        // progressively light up node cards as we move through the pipeline
+        var nodeIdx = Math.floor((i+1) / stages.length * nodeIds.length) - 1;
+        for(var k=0; k<=nodeIdx; k++){
+          var nc = $("deploynode-"+nodeIds[k]);
+          if(nc) nc.classList.add("loaded");
+        }
+        i++;
+        step();
+      }, dur);
+    }
+    step();
+  }
+
+  function finishDeploy(nodeIds){
+    // ensure all node cards loaded
+    nodeIds.forEach(function(id){
+      var nc = $("deploynode-"+id);
+      if(nc) nc.classList.add("loaded");
+    });
+    $("deployProg").textContent = "ALL BRAINS PROVISIONED — 4/4 NODES READY";
+    var btn = $("enterBtn");
+    btn.classList.add("show");
+  }
+
+  // ============================================================
+  // FIELD
+  // ============================================================
+  function enterField(){
+    // ensure we have config; if provisioning couldn't load it, try again
+    if(!CONFIG){
+      fetchJSON("/api/config").then(function(c){ CONFIG = c; mountField(); })
+        .catch(function(){ alert("Unable to load /api/config. Is server.py running?"); });
+    } else {
+      mountField();
+    }
+  }
+
+  function mountField(){
+    $("provision").style.display = "none";
+    $("field").style.display = "block";
+    var pill = $("statusPill");
+    pill.className = "status-pill status-down";
+    pill.textContent = "COMMS: OFFLINE";
+    renderIdentities();
+    renderNodes();
+  }
+
+  function renderIdentities(){
+    var wrap = $("idGrid");
+    wrap.innerHTML = "";
+    var ids = CONFIG.identities;
+    Object.keys(ids).forEach(function(id){
+      var d = ids[id];
+      var card = el("div", "id-card");
+      card.dataset.id = id;
+      var row = el("div", "row");
+      row.appendChild(el("span", "who", id));
+      row.appendChild(el("span", "badge "+clearanceClass(d.clearance), d.clearance));
+      card.appendChild(row);
+      card.appendChild(el("div", "label", d.label));
+      card.addEventListener("click", function(){ selectIdentity(id); });
+      wrap.appendChild(card);
+    });
+  }
+
+  function selectIdentity(id){
+    selectedIdentity = id;
+    var cards = $("idGrid").children;
+    for(var i=0;i<cards.length;i++){
+      cards[i].classList.toggle("sel", cards[i].dataset.id === id);
+    }
+    // re-evaluate node locks; if currently paired node now locked, unpair
+    renderNodes();
+    if(pairedNode){
+      var nm = CONFIG.nodes[pairedNode];
+      if(CLEAR[CONFIG.identities[id].clearance] < CLEAR[nm.min_clearance]){
+        pairedNode = null;
+        updateConsoleState();
+        renderNodes();
+      } else {
+        updatePairStatus();
+      }
+    }
+  }
+
+  function renderNodes(){
+    var wrap = $("nodeGrid");
+    wrap.innerHTML = "";
+    var nodes = CONFIG.nodes;
+    var myClear = selectedIdentity ? CLEAR[CONFIG.identities[selectedIdentity].clearance] : -1;
+    Object.keys(nodes).forEach(function(id){
+      var n = nodes[id];
+      var locked = selectedIdentity && (myClear < CLEAR[n.min_clearance]);
+      var card = el("div", "node-card");
+      card.dataset.id = id;
+      if(locked) card.classList.add("locked");
+      if(pairedNode === id && !locked) card.classList.add("paired");
+
+      var top = el("div", "top");
+      top.appendChild(el("div", "ic", n.icon));
+      var nmline = el("div", "nm-line");
+      nmline.appendChild(el("div", "nname name", n.name));
+      nmline.appendChild(el("div", "dev", n.device));
+      top.appendChild(nmline);
+      card.appendChild(top);
+
+      var foot = el("div", "foot");
+      foot.appendChild(el("span", "badge "+clearanceClass(n.min_clearance),
+        "PAIR: "+n.min_clearance));
+      var tag = locked ? "🔒 LOCKED"
+              : (pairedNode === id ? "● PAIRED" : "TAP TO PAIR");
+      foot.appendChild(el("span", "pair-tag", tag));
+      card.appendChild(foot);
+
+      if(locked) card.appendChild(el("div", "lock-ico", "🔒"));
+
+      card.addEventListener("click", function(){
+        if(!selectedIdentity){ flashHint("Select an identity first.", true); return; }
+        if(locked){ pairLockedAttempt(id); return; }
+        pairNode(id);
+      });
+      wrap.appendChild(card);
+    });
+  }
+
+  function pairNode(id){
+    pairedNode = id;
+    renderNodes();
+    updateConsoleState();
+    updatePairStatus();
+    $("answerArea").innerHTML = "";
+  }
+
+  // attempting to pair a locked node still fires an audit DENIED via the server
+  function pairLockedAttempt(id){
+    pairedNode = null;
+    updateConsoleState();
+    // hit the server so the audit log + reason are authoritative
+    submitQuery("attempt to pair", id, true);
+  }
+
+  function updatePairStatus(){
+    var ps = $("pairStatus");
+    if(pairedNode && selectedIdentity){
+      var n = CONFIG.nodes[pairedNode];
+      var idn = CONFIG.identities[selectedIdentity];
+      ps.innerHTML = "PAIRED &rarr; <b>"+n.name+"</b> &nbsp;|&nbsp; OPERATOR: "+idn.label;
+    } else {
+      ps.textContent = "NO NODE PAIRED — select a node above to begin.";
+    }
+  }
+
+  function updateConsoleState(){
+    var active = !!(pairedNode && selectedIdentity);
+    $("queryBox").disabled = !active;
+    $("sendBtn").disabled = !active;
+    $("micBtn").disabled = !active || !STT_SUPPORTED;
+    updatePairStatus();
+    if(active && STT_SUPPORTED) $("micHint").textContent = "Hold MIC to speak. Text input is the air-gap fallback.";
+  }
+
+  function flashHint(msg, err){
+    var h = $("micHint");
+    h.textContent = msg;
+    h.className = "mic-hint" + (err ? " err" : "");
+    setTimeout(function(){
+      h.className = "mic-hint";
+      h.textContent = STT_SUPPORTED ? "Hold MIC to speak. Text input is the air-gap fallback."
+                                    : "Speech recognition unavailable — type your query (air-gap mode).";
+    }, 3500);
+  }
+
+  // ---------- ASK ----------
+  function submitQuery(query, forceNode, isLockedProbe){
+    var node = forceNode || pairedNode;
+    if(!node || !selectedIdentity) return;
+    query = (query || "").trim();
+    if(!query && !isLockedProbe){ flashHint("Enter a query first.", true); return; }
+
+    if(!isLockedProbe){
+      $("sendBtn").disabled = true;
+      $("answerArea").innerHTML = '<div class="empty-console">QUERYING ON-NODE BRAIN…</div>';
+    }
+
+    fetchJSON("/api/ask", {
+      method:"POST",
+      headers:{"Content-Type":"application/json"},
+      body: JSON.stringify({ node:node, identity:selectedIdentity, query:query })
+    }).then(function(res){
+      handleAskResponse(res, query, isLockedProbe);
+    }).catch(function(e){
+      $("sendBtn").disabled = false;
+      if(!isLockedProbe){
+        $("answerArea").innerHTML = '<div class="denied-card"><div class="dh">⚠ LINK ERROR</div>'+
+          '<div class="dr">Could not reach on-node brain ('+(e.message||"error")+').</div></div>';
+      }
+    });
+  }
+
+  function handleAskResponse(res, query, isLockedProbe){
+    $("sendBtn").disabled = !(pairedNode && selectedIdentity);
+    if(res.audit) addAudit(res.audit, res.allowed);
+
+    if(!res.allowed){
+      renderDenied(res.reason || "Access denied.");
+      speak("Access denied.");
+      return;
+    }
+    if(isLockedProbe){
+      // unusual, but if server allowed it, treat as a real pairing
+      pairedNode = pairedNode;
+    }
+    renderAnswer(res, query);
+    speak(res.answer);
+  }
+
+  function renderDenied(reason){
+    var area = $("answerArea");
+    area.innerHTML = "";
+    var card = el("div", "denied-card");
+    card.appendChild(el("div", "dh", "&#9888; ACCESS DENIED"));
+    card.appendChild(el("div", "dr", reason));
+    area.appendChild(card);
+  }
+
+  function renderAnswer(res, query){
+    var area = $("answerArea");
+    area.innerHTML = "";
+
+    if(query){
+      var echo = el("div", "query-echo", "OPERATOR ASKED: <b>&ldquo;"+escapeHtml(query)+"&rdquo;</b>");
+      area.appendChild(echo);
+    }
+
+    var card = el("div", "answer-card");
+    card.appendChild(el("div", "ans-text", escapeHtml(res.answer)));
+
+    var meta = el("div", "answer-meta");
+    if(res.citation) meta.appendChild(el("span", "chip chip-cite", "&#128279; "+escapeHtml(res.citation)));
+
+    var isFull = res.depth && res.depth.indexOf("FULL") === 0;
+    meta.appendChild(el("span", "chip "+(isFull?"chip-depth-full":"chip-depth-basic"),
+      "DEPTH: "+escapeHtml(res.depth || "—")));
+
+    var isQwen = res.engine === "qwen-on-device";
+    meta.appendChild(el("span", "chip chip-engine"+(isQwen?" qwen":""),
+      "ENGINE: "+escapeHtml(res.engine || "—")));
+
+    var spk = el("span", "speaking", '<span class="wv"></span><span class="wv"></span><span class="wv"></span> SPEAKING');
+    spk.id = "speakingInd";
+    meta.appendChild(spk);
+
+    card.appendChild(meta);
+    area.appendChild(card);
+  }
+
+  function escapeHtml(s){
+    return String(s).replace(/[&<>"']/g, function(c){
+      return {"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[c];
+    });
+  }
+
+  // ---------- AUDIT ----------
+  function addAudit(msg, allowed){
+    var log = $("auditLog");
+    var emptyEl = log.querySelector(".empty");
+    if(emptyEl) emptyEl.remove();
+    var entry = el("div", "log-entry " + (allowed ? "served" : "denied"));
+    entry.appendChild(el("div", "ts", nowTs()));
+    entry.appendChild(el("div", "msg", escapeHtml(msg)));
+    log.appendChild(entry);
+    log.scrollTop = log.scrollHeight;
+    auditEvents++;
+    $("auditCount").textContent = auditEvents + (auditEvents===1?" EVENT":" EVENTS");
+  }
+
+  // ============================================================
+  // SPEECH  (TTS + STT) — both optional / guarded
+  // ============================================================
+  var TTS = ("speechSynthesis" in window) ? window.speechSynthesis : null;
+  function speak(text){
+    if(!TTS || !text) return;
+    try{
+      TTS.cancel();
+      var u = new SpeechSynthesisUtterance(text);
+      u.rate = 1.0; u.pitch = 0.95; u.volume = 1.0;
+      var ind = $("speakingInd");
+      u.onstart = function(){ if(ind) ind.classList.add("on"); };
+      u.onend = function(){ if(ind) ind.classList.remove("on"); };
+      u.onerror = function(){ if(ind) ind.classList.remove("on"); };
+      TTS.speak(u);
+    }catch(e){ /* no-op */ }
+  }
+
+  var SR = window.SpeechRecognition || window.webkitSpeechRecognition || null;
+  var STT_SUPPORTED = !!SR;
+  var recog = null, listening = false;
+
+  function setupMic(){
+    var btn = $("micBtn");
+    if(!STT_SUPPORTED){
+      btn.disabled = true;
+      btn.title = "Speech recognition not available in this browser";
+      $("micHint").textContent = "Speech recognition unavailable — type your query (air-gap mode).";
+      return;
+    }
+    // press-and-hold to talk
+    var startFn = function(ev){
+      ev.preventDefault();
+      if(btn.disabled || listening) return;
+      startListening();
+    };
+    var stopFn = function(ev){
+      if(ev) ev.preventDefault();
+      if(listening && recog){ try{ recog.stop(); }catch(e){} }
+    };
+    btn.addEventListener("mousedown", startFn);
+    btn.addEventListener("touchstart", startFn, {passive:false});
+    window.addEventListener("mouseup", stopFn);
+    btn.addEventListener("touchend", stopFn);
+    // also support click-toggle as a convenience
+    btn.addEventListener("keydown", function(e){ if(e.key===" "||e.key==="Enter"){ startFn(e); }});
+  }
+
+  function startListening(){
+    try{
+      recog = new SR();
+    }catch(e){ flashHint("Mic init failed — use text.", true); return; }
+    recog.lang = "en-US";
+    recog.interimResults = true;
+    recog.maxAlternatives = 1;
+    recog.continuous = false;
+    var finalText = "";
+    var btn = $("micBtn");
+
+    recog.onstart = function(){
+      listening = true;
+      btn.classList.add("listening");
+      $("micHint").className = "mic-hint";
+      $("micHint").textContent = "● LISTENING — release to send…";
+      $("queryBox").value = "";
+    };
+    recog.onresult = function(ev){
+      var interim = "";
+      for(var i=ev.resultIndex; i<ev.results.length; i++){
+        var t = ev.results[i][0].transcript;
+        if(ev.results[i].isFinal) finalText += t;
+        else interim += t;
+      }
+      $("queryBox").value = (finalText + interim).trim();
+    };
+    recog.onerror = function(ev){
+      listening = false;
+      btn.classList.remove("listening");
+      var msg = ev.error === "not-allowed" ? "Mic blocked — type your query instead."
+              : ev.error === "no-speech" ? "No speech detected — try again or type."
+              : "STT error ("+ev.error+") — use text fallback.";
+      flashHint(msg, true);
+    };
+    recog.onend = function(){
+      listening = false;
+      btn.classList.remove("listening");
+      var q = $("queryBox").value.trim();
+      if(q){
+        $("micHint").textContent = "Transcribed. Sending…";
+        submitQuery(q);
+      } else {
+        flashHint(STT_SUPPORTED ? "Nothing captured — type your query." : "", true);
+      }
+    };
+    try{ recog.start(); }
+    catch(e){ flashHint("Could not start mic — use text.", true); }
+  }
+
+  // ============================================================
+  // WIRE-UP
+  // ============================================================
+  document.addEventListener("DOMContentLoaded", function(){
+    $("enterBtn").addEventListener("click", enterField);
+    $("sendBtn").addEventListener("click", function(){
+      submitQuery($("queryBox").value);
+    });
+    $("queryBox").addEventListener("keydown", function(e){
+      if(e.key === "Enter" && !e.shiftKey){
+        e.preventDefault();
+        if(!$("sendBtn").disabled) submitQuery($("queryBox").value);
+      }
+    });
+    setupMic();
+    startProvisioning();
+    // warm up voices (Chrome loads them async)
+    if(TTS){ TTS.onvoiceschanged = function(){ /* triggers voice list load */ }; }
+  });
+})();
+</script>
+</body>
+</html>
