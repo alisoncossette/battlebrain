@@ -23,7 +23,7 @@ OLLAMA_MODEL = "qwen2.5:3b"  # on-device Qwen brain (optional)
 # match by meaning (cosine) and FAIL CLOSED below threshold -- the server refuses
 # rather than letting the model invent off an irrelevant passage. Falls back to
 # keyword matching only if embeddings are unavailable.
-SIM_THRESHOLD = 0.55
+SIM_THRESHOLD = 0.60   # valid matches observed 0.68-0.79; off-topic 0.49-0.52
 try:
     from embedder import embed_query, cosine
     _EMBED_OK = True
