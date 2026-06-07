@@ -11,13 +11,24 @@ If Ollama (with a Qwen model) is running on localhost:11434 the answer is phrase
 by an ON-DEVICE model. Otherwise the server returns the retrieved passage directly
 -- so the demo works fully air-gapped with zero dependencies.
 """
-import json, re, urllib.request, http.server, socketserver
+import json, urllib.request, http.server, socketserver
 from pathlib import Path
 
 PORT = 8000
 ROOT = Path(__file__).parent
 OLLAMA_URL = "http://localhost:11434/api/generate"
 OLLAMA_MODEL = "qwen2.5:3b"  # on-device Qwen brain (optional)
+
+# Semantic retrieval. If the on-device embedder + a built index are present we
+# match by meaning (cosine) and FAIL CLOSED below threshold -- the server refuses
+# rather than letting the model invent off an irrelevant passage. Falls back to
+# keyword matching only if embeddings are unavailable.
+SIM_THRESHOLD = 0.55
+try:
+    from embedder import embed_query, cosine
+    _EMBED_OK = True
+except Exception:
+    _EMBED_OK = False
 
 # ---------------------------------------------------------------------------
 # CLEARANCE LEVELS  (higher = more access)
@@ -133,10 +144,15 @@ try:
 except Exception:
     pass
 try:
-    _cache = ROOT / "brains_cache.json"
-    if _cache.exists():
+    _embedded = ROOT / "brains_embedded.json"   # semantic index (has per-chunk `emb`)
+    _cache = ROOT / "brains_cache.json"          # text-only provisioned cache
+    if _embedded.exists():
+        BRAINS = json.loads(_embedded.read_text(encoding="utf-8"))
+        _nemb = sum(1 for nb in BRAINS.values() for ch in nb["chunks"] if ch.get("emb"))
+        print(f"[brains] loaded SEMANTIC index ({_nemb} embedded chunks): {list(BRAINS.keys())}")
+    elif _cache.exists():
         BRAINS = json.loads(_cache.read_text(encoding="utf-8"))
-        print(f"[brains] loaded garrison-provisioned cache: {list(BRAINS.keys())}")
+        print(f"[brains] loaded garrison cache (no embeddings): {list(BRAINS.keys())}")
 except Exception as _e:
     print(f"[brains] using inline doctrine (no cache): {_e}")
 
@@ -153,21 +169,38 @@ def authorize(node_id, identity_id):
                 f"You hold {IDENTITIES[identity_id]['clearance']}. Need-to-know not established.")
     return (True, me >= need_full, "PAIRED")
 
+def _allowed_chunks(node_id, full_access):
+    return [ch for ch in BRAINS[node_id]["chunks"]
+            if full_access or ch["tier"] != "advanced"]
+
 def retrieve(node_id, query, full_access):
-    """Keyword-score the node's chunks; return best chunk respecting tier."""
-    q = set(re.findall(r"[a-z0-9]+", query.lower()))
-    best, score = None, 0
-    for ch in BRAINS[node_id]["chunks"]:
-        if ch["tier"] == "advanced" and not full_access:
+    """SEMANTIC-ONLY retrieval. Returns (chunk, score, method); chunk is None
+    whenever we cannot meaningfully ground an answer -- the caller then FAILS
+    CLOSED and refuses. There is deliberately NO keyword fallback: token-matching
+    is brittle (a shared word like "casualty" pulls the wrong doctrine) and a
+    confidently-wrong cited answer is the exact failure this tool must not make.
+    If the semantic index or embedder is unavailable, the brain refuses."""
+    chunks = _allowed_chunks(node_id, full_access)
+    if not chunks:
+        return (None, 0.0, "none")
+
+    have_index = any(ch.get("emb") for ch in chunks)
+    if not (_EMBED_OK and have_index):
+        return (None, 0.0, "no-semantic-index")   # not provisioned -> refuse
+    qv = embed_query(query)
+    if not qv:
+        return (None, 0.0, "embedder-offline")     # cannot embed query -> refuse
+
+    best, score = None, -1.0
+    for ch in chunks:
+        if not ch.get("emb"):
             continue
-        s = len(q & set(ch["kw"].split()))
+        s = cosine(qv, ch["emb"])
         if s > score:
             best, score = ch, s
-    if best is None:  # fall back to first allowed chunk
-        for ch in BRAINS[node_id]["chunks"]:
-            if ch["tier"] == "basic" or full_access:
-                best = ch; break
-    return best
+    if best is not None and score >= SIM_THRESHOLD:
+        return (best, round(score, 3), "semantic")
+    return (None, round(max(score, 0.0), 3), "semantic")   # below threshold -> refuse
 
 def phrase_with_ollama(node_name, passage, query):
     """Optional: let an on-device Qwen model phrase the answer. Returns None if unavailable."""
@@ -205,13 +238,29 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             return self._json({"allowed": False, "reason": reason,
                                "audit": f"DENIED  {IDENTITIES[ident]['label']}  ->  {BRAINS[node_id]['name']}"})
 
-        ch = retrieve(node_id, query, full)
+        ch, score, method = retrieve(node_id, query, full)
+
+        # FAIL CLOSED: nothing in this brain is relevant enough. Refuse and do
+        # NOT call the model -- a grounded tool must say "I don't have that"
+        # rather than invent confidently-wrong, mis-cited guidance.
+        if ch is None:
+            return self._json({
+                "allowed": True, "matched": False,
+                "answer": "No applicable doctrine found in this brain for that request. "
+                          "Do not act on an uncited answer -- escalate to the appropriate "
+                          "authority or query the correct node.",
+                "citation": "NO DOCTRINE MATCH", "depth": "—",
+                "engine": f"refused (best {method} score {score} < {SIM_THRESHOLD})",
+                "audit": f"NO-MATCH  {IDENTITIES[ident]['label']}  ->  {BRAINS[node_id]['name']}  "
+                         f"[best {method} {score}]",
+            })
+
         spoken = phrase_with_ollama(BRAINS[node_id]["name"], ch["text"], query)
-        engine = "qwen-on-device" if spoken else "local-retrieval"
+        engine = ("qwen-on-device" if spoken else "local-retrieval") + f" / {method} {score}"
         answer = spoken or ch["text"]
         depth = "FULL" if full else "BASIC (buddy-aid tier)"
         self._json({
-            "allowed": True, "answer": answer, "citation": ch["src"],
+            "allowed": True, "matched": True, "answer": answer, "citation": ch["src"],
             "depth": depth, "engine": engine,
             "audit": f"SERVED  {IDENTITIES[ident]['label']}  ->  {BRAINS[node_id]['name']}  [{ch['src']}]",
         })
